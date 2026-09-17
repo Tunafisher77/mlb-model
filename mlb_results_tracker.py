@@ -12,7 +12,7 @@ import json
 import os
 import re
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Iterable
 from zoneinfo import ZoneInfo
 
@@ -36,6 +36,7 @@ PROP_TRACKING_TAB = "Tracking - Player Props"
 BEST_CARD_TRACKING_TAB = "Tracking - Best Card"
 PERFORMANCE_TAB = "Tracking - Performance"
 RUN_LOG_TAB = "Tracking - Run Log"
+BEST_CARD_RESULTS_EMAIL_TAB = "Best Card Results Email Summary"
 
 GAME_HEADERS = [
     "Prediction ID", "Date", "Model Version", "Rank", "GamePk", "Game",
@@ -1026,6 +1027,49 @@ def refresh_performance(workbook):
     quota_retry(lambda: worksheet.update(values=rows, range_name=f"A1:H{len(rows)}"))
 
 
+def refresh_best_card_results_email(workbook, target_date: str):
+    """Publish the prior slate's graded Best Card in an email-friendly table."""
+    result_date = (datetime.strptime(target_date, "%Y-%m-%d").date() - timedelta(days=1)).isoformat()
+    tracking = get_or_create_sheet(
+        workbook, BEST_CARD_TRACKING_TAB, BEST_CARD_HEADERS, rows=5000
+    )
+    records = [
+        row for row in rows_as_records(quota_retry(tracking.get_all_values))
+        if str(row.get("Date", ""))[:10] == result_date
+    ]
+    records.sort(key=lambda row: as_int(row.get("Card Rank"), 999))
+
+    headers = [
+        "Result Date", "Card", "Game", "Final Score", "Component",
+        "Selection", "Actual", "Result", "Status",
+    ]
+    output: list[list[Any]] = []
+    for row in records:
+        card = row.get("Card Rank", "")
+        game = row.get("Game", "")
+        score = row.get("Final Score", "")
+        status = row.get("Result Status", "Pending") or "Pending"
+        output.extend([
+            [result_date, card, game, score, "Game Winner", row.get("Projected Winner", ""),
+             row.get("Actual Winner", ""), row.get("Winner Correct?", ""), status],
+            [result_date, card, game, score, "Home Run", row.get("HR Player", ""),
+             row.get("HR Home Runs", ""), row.get("HR Hit?", ""), row.get("HR Component Status", status)],
+            [result_date, card, game, score, row.get("Prop 1 Type", "Player Prop"),
+             row.get("Prop 1 Pick", ""), row.get("Prop 1 Actual Value", ""),
+             row.get("Prop 1 Hit?", ""), row.get("Prop 1 Component Status", status)],
+            [result_date, card, game, score, row.get("Prop 2 Type", "Player Prop"),
+             row.get("Prop 2 Pick", ""), row.get("Prop 2 Actual Value", ""),
+             row.get("Prop 2 Hit?", ""), row.get("Prop 2 Component Status", status)],
+        ])
+
+    summary = get_or_create_sheet(workbook, BEST_CARD_RESULTS_EMAIL_TAB, headers, rows=100)
+    quota_retry(summary.clear)
+    values = [headers] + output
+    quota_retry(lambda: summary.update(
+        values=values, range_name=f"A1:I{max(1, len(values))}"
+    ))
+
+
 def append_run_log(workbook, mode: str, target_date: str, details: str, status: str):
     headers = ["Run Timestamp UTC", "Mode", "Target Date", "Status", "Details"]
     worksheet = get_or_create_sheet(workbook, RUN_LOG_TAB, headers, rows=2000)
@@ -1062,6 +1106,7 @@ def run(mode: str, target_date: str) -> dict[str, int]:
             counts["prop_graded"] = grade_player_prop_rows(workbook, cache)
             counts["best_card_graded"] = grade_best_card_rows(workbook, cache)
         refresh_performance(workbook)
+        refresh_best_card_results_email(workbook, target_date)
         details = json.dumps(counts, sort_keys=True)
         if best_card_warning:
             details += f" | {best_card_warning}"
