@@ -5,6 +5,13 @@ from __future__ import annotations
 from typing import Any, Iterable
 
 
+PROP_HISTORICAL_HIT_RATES = {
+    "Hits": 70.8,
+    "RBIs": 38.9,
+    "Strikeouts": 18.2,
+}
+
+
 def number(value: Any, default: float = 0.0) -> float:
     try:
         return float(value)
@@ -32,6 +39,7 @@ def select_distinct_props(
     ordered = sorted(
         props,
         key=lambda row: (
+            PROP_HISTORICAL_HIT_RATES.get(str(row.get("Prop Type", "")).strip(), 0.0),
             row.get("Prop Candidate Source") == "Published Player Prop",
             number(row.get("Prop Score")),
             number(row.get("Projected Probability")),
