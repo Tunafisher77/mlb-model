@@ -996,6 +996,23 @@ def performance_rows(workbook) -> list[list[Any]]:
         if error.__class__.__name__ != "WorksheetNotFound":
             raise
         best_card_records = []
+
+    # Same-day model refreshes can archive more than one version of a card.
+    # Performance must count only the newest version for each date/card rank.
+    latest_best_cards: dict[tuple[str, int], dict[str, str]] = {}
+    for row in best_card_records:
+        card_date = str(row.get("Date", ""))[:10]
+        card_rank = as_int(row.get("Card Rank"), 0)
+        if not card_date or card_rank not in {1, 2, 3}:
+            continue
+        key = (card_date, card_rank)
+        current = latest_best_cards.get(key)
+        if current is None or str(row.get("Snapshot Timestamp UTC", "")) >= str(
+            current.get("Snapshot Timestamp UTC", "")
+        ):
+            latest_best_cards[key] = row
+    best_card_records = list(latest_best_cards.values())
+
     best_card_segments = [
         ("Complete Stacks", "Perfect Stack?"),
         ("Game Winners", "Winner Correct?"),
