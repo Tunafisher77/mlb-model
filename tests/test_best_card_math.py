@@ -52,7 +52,7 @@ class BestCardMathTest(unittest.TestCase):
         self.assertEqual(rows_as_records(values)[0]["Score"], "72.76")
 
 
-    def test_thin_slate_publishes_only_qualified_games(self):
+    def test_thin_slate_uses_historical_priority_fallback_for_three_stacks(self):
         games = [
             {"GamePk": "1", "Game": "A @ B", "Rank": "1", "Win Probability": "75", "Projected Winner": "B"},
             {"GamePk": "2", "Game": "C @ D", "Rank": "2", "Win Probability": "72", "Projected Winner": "D"},
@@ -73,9 +73,11 @@ class BestCardMathTest(unittest.TestCase):
 
         card, _ = build_stacks(games, hrs, props)
 
-        self.assertEqual(len(card), 2)
-        self.assertEqual({row["GamePk"] for row in card}, {"1", "2"})
-        self.assertFalse(any("Emergency alternate" in row["Selection Notes"] for row in card))
+        self.assertEqual(len(card), 3)
+        self.assertEqual(len({row["Prediction ID"] for row in card}), 3)
+        self.assertTrue(
+            any("Historical-priority alternate" in row["Selection Notes"] for row in card)
+        )
 
     def test_hits_are_preferred_and_strikeouts_are_excluded(self):
         games = [
