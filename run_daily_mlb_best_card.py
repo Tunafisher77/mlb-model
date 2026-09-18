@@ -1,4 +1,4 @@
-"""Build up to three qualified same-game MLB statistical stacks."""
+"""Build exactly three same-game MLB stacks ranked with cleaned historical results."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from zoneinfo import ZoneInfo
 from best_card_math import composite_stack_score, number, select_distinct_props, top_complete_stacks
 
 
-MODEL_VERSION = "Best Card V1.2 - Qualified Hit-Rate Filters"
+MODEL_VERSION = "Best Card V1.2 - Historical Hit-Rate Ranking"
 MODEL_TIMEZONE = os.environ.get("MLB_SCHEDULE_TZ", "America/New_York")
 DATE_OVERRIDE = os.environ.get("MLB_SCHEDULE_DATE", "").strip()
 SHEET_NAME = os.environ.get("SHEET_NAME", "MLB Daily Model")
@@ -31,7 +31,18 @@ BEST_CARD_RUN_TAB = "Best Card Run Log"
 
 PUBLISHED_GAME_LIMIT = 7
 PUBLISHED_HR_LIMIT = 9
+EXTENDED_HR_LIMIT = 30
 PUBLISHED_PROP_LIMIT = 20
+
+HISTORICAL_HR_RATES = {
+    "Published HR Target": 22.4,
+    "Extended HR Candidate": 12.5,
+}
+HISTORICAL_PROP_RATES = {
+    "Hits": 70.8,
+    "RBIs": 38.9,
+    "Strikeouts": 18.2,
+}
 
 
 def resolve_date():
@@ -136,8 +147,6 @@ def load_inputs(workbook):
         rank = as_int(row.get("Rank"))
         if date_text(row.get("Date")) != TODAY.isoformat() or not 1 <= rank <= PUBLISHED_GAME_LIMIT:
             continue
-        if number(row.get("Win Probability")) < 65:
-            continue
         if not verified(row.get("Verified")):
             continue
         row = dict(row)
@@ -149,7 +158,7 @@ def load_inputs(workbook):
     hr_candidates = []
     for row in hr_records:
         rank = as_int(row.get("Rank"))
-        if date_text(row.get("Date")) != TODAY.isoformat() or not 1 <= rank <= PUBLISHED_HR_LIMIT:
+        if date_text(row.get("Date")) != TODAY.isoformat() or not 1 <= rank <= EXTENDED_HR_LIMIT:
             continue
         if hr_version and row.get("Model Version") != hr_version:
             continue
@@ -157,7 +166,7 @@ def load_inputs(workbook):
             continue
         row = dict(row)
         row["GamePk"] = normalized_game_pk(row.get("GamePk"))
-        row["HR Candidate Source"] = "Published HR Target"
+        row["HR Candidate Source"] = "Published HR Target" if rank <= PUBLISHED_HR_LIMIT else "Extended HR Candidate"
         if row["GamePk"] and row.get("Player"):
             hr_candidates.append(row)
 
@@ -199,12 +208,20 @@ def best_hr_for_game(candidates: list[dict[str, Any]]) -> dict[str, Any] | None:
     return sorted(
         candidates,
         key=lambda row: (
-            row.get("HR Candidate Source") == "Published HR Target",
+            HISTORICAL_HR_RATES.get(row.get("HR Candidate Source"), 0.0),
             number(row.get("Score")),
             -as_int(row.get("Rank"), 9999),
         ),
         reverse=True,
     )[0]
+
+
+def historical_prop_rate(prop: dict[str, Any]) -> float:
+    return HISTORICAL_PROP_RATES.get(clean_text(prop.get("Prop Type")), 0.0)
+
+
+def blended_component_score(model_score: Any, historical_rate: float) -> float:
+    return 0.5 * number(model_score) + 0.5 * historical_rate
 
 
 def prediction_id(game_pk: str, hr: dict[str, Any] | None = None, props: list[dict[str, Any]] | None = None) -> str:
@@ -231,7 +248,13 @@ def build_stacks(games, hr_candidates, props):
         game_pk = game["GamePk"]
         prop_one, prop_two = selected_props
         stack_score = composite_stack_score(
-            game.get("Win Probability"), hr.get("Score"), prop_one.get("Prop Score"), prop_two.get("Prop Score")
+            game.get("Win Probability"),
+            blended_component_score(
+                hr.get("Score"),
+                HISTORICAL_HR_RATES.get(hr.get("HR Candidate Source"), 0.0),
+            ),
+            blended_component_score(prop_one.get("Prop Score"), historical_prop_rate(prop_one)),
+            blended_component_score(prop_two.get("Prop Score"), historical_prop_rate(prop_two)),
         )
         stack = {
             "Prediction ID": prediction_id(game_pk, hr, selected_props), "Date": TODAY.isoformat(),
@@ -263,20 +286,13 @@ def build_stacks(games, hr_candidates, props):
         game_pk = game["GamePk"]
         hr = best_hr_for_game(hrs_by_game.get(game_pk, []))
         game_props = props_by_game.get(game_pk, [])
-        hit_props = [row for row in game_props if row.get("Prop Type") == "Hits"]
-        selected_props = select_distinct_props(hit_props, hr or {}, count=2)
-        selection_mode = "Two Hits props"
-        if len(selected_props) < 2:
-            hit_rbi_props = [
-                row for row in game_props if row.get("Prop Type") in {"Hits", "RBIs"}
-            ]
-            selected_props = select_distinct_props(hit_rbi_props, hr or {}, count=2)
-            selection_mode = "Hits preferred; RBI fallback"
+        selected_props = select_distinct_props(game_props, hr or {}, count=2)
+        selection_mode = "Historical priority: Hits, then RBIs, then strikeouts"
         reasons = []
         if not hr:
-            reasons.append("No published HR candidate in ranks 1-9")
+            reasons.append("No verified HR candidate in ranks 1-30")
         if len(selected_props) < 2:
-            reasons.append("Fewer than two distinct Hits/RBI props after excluding HR hitter")
+            reasons.append("Fewer than two distinct verified props after excluding HR hitter")
         complete = not reasons
         integrity.append({
             "Date": TODAY.isoformat(), "GamePk": game_pk, "Game": game.get("Game", ""),
@@ -292,6 +308,50 @@ def build_stacks(games, hr_candidates, props):
             primary_keys.add(stack["Prediction ID"])
 
     card = top_complete_stacks(stacks, count=3)
+
+    # If fewer than three games form a primary stack, rank alternate complete
+    # combinations using the same historical component rates. This keeps three
+    # stacks without inventing or duplicating a selection.
+    if len(card) < 3:
+        alternates = []
+        for game in games:
+            game_pk = game["GamePk"]
+            ordered_hrs = sorted(
+                hrs_by_game.get(game_pk, []),
+                key=lambda row: (
+                    HISTORICAL_HR_RATES.get(row.get("HR Candidate Source"), 0.0),
+                    number(row.get("Score")),
+                    -as_int(row.get("Rank"), 9999),
+                ),
+                reverse=True,
+            )
+            for hr in ordered_hrs:
+                eligible_props = select_distinct_props(
+                    props_by_game.get(game_pk, []), hr, count=6
+                )
+                for first_index in range(len(eligible_props)):
+                    for second_index in range(first_index + 1, len(eligible_props)):
+                        selected = [
+                            eligible_props[first_index],
+                            eligible_props[second_index],
+                        ]
+                        stack = make_stack(
+                            game,
+                            hr,
+                            selected,
+                            "Historical-priority alternate complete stack",
+                        )
+                        if stack["Prediction ID"] not in primary_keys:
+                            alternates.append(stack)
+        card.extend(
+            top_complete_stacks(alternates, count=max(0, 3 - len(card)))
+        )
+
+    if len(card) != 3:
+        raise RuntimeError(
+            f"Only {len(card)} complete stacks could be formed; exactly three are required."
+        )
+
     for rank, stack in enumerate(card, start=1):
         stack["Card Rank"] = rank
     return card, integrity
@@ -341,10 +401,10 @@ def append_unique(worksheet, headers, records):
 
 def build_email_rows(card):
     rows = [
-        ["Daily MLB Best Card - Up to Three Qualified Statistical Game Stacks"], ["Last Updated", RUN_LOCAL],
+        ["Daily MLB Best Card - Three Historically Ranked Statistical Game Stacks"], ["Last Updated", RUN_LOCAL],
         ["Model Version", MODEL_VERSION], ["Schedule Date Used", TODAY.isoformat()],
         ["Schedule Date Logic", DATE_LOGIC],
-        ["Selection Method", "35% Game model, 25% HR model, 20% per Player Prop; statistics only."], [],
+        ["Selection Method", "35% Game winner, 25% HR, 20% per prop; component scores blend current model strength with cleaned historical hit rates."], [],
     ]
     for stack in card:
         rows.extend([
@@ -358,11 +418,11 @@ def build_email_rows(card):
         ])
     rows.extend([
         ["Model Notes"],
-        ["HR Qualification Rule", "Only published HR ranks 1-9 are eligible; extended HR candidates are excluded."],
+        ["HR Priority Rule", "Published HR targets are prioritized using a 22.4% historical rate; extended candidates (12.5%) are fallback-only."],
         ["Data Constraint", "Statistics only. No sportsbook odds, lines, implied probability, or market influence."],
-        ["Prop Qualification Rule", "Hits are preferred for both prop slots; RBIs are fallback-only; strikeout props are excluded."],
-        ["Card Count Rule", "Up to three qualified games are published; weak stacks are never added solely to reach three."],
-        ["Winner Qualification Rule", "Game-model win probability must be at least 65%."],
+        ["Prop Priority Rule", "Cleaned historical rates drive priority: Hits 70.8%, RBIs 38.9%, strikeouts 18.2%."],
+        ["Card Count Rule", "Exactly three complete stacks are published; verified fallbacks are used only when required."],
+        ["Winner Priority Rule", "Higher game-model win probability is preferred; no hard cutoff prevents completion of the three-stack card."],
         ["Results Tracking", "Each component and complete stack will be archived and graded after games become final."],
     ])
     return rows
