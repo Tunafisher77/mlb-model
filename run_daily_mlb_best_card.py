@@ -1,4 +1,4 @@
-"""Build exactly three same-game MLB statistical stacks from published model outputs."""
+"""Build up to three qualified same-game MLB statistical stacks."""
 
 from __future__ import annotations
 
@@ -13,10 +13,10 @@ from zoneinfo import ZoneInfo
 from best_card_math import composite_stack_score, number, select_distinct_props, top_complete_stacks
 
 
-MODEL_VERSION = "Best Card V1.1 - Always Three Statistical Fallback"
+MODEL_VERSION = "Best Card V1.2 - Qualified Hit-Rate Filters"
 MODEL_TIMEZONE = os.environ.get("MLB_SCHEDULE_TZ", "America/New_York")
 DATE_OVERRIDE = os.environ.get("MLB_SCHEDULE_DATE", "").strip()
-SHEET_NAME = os.environ.get("SHEET_NAME", "Daily MLB HR Picks Scorecard")
+SHEET_NAME = os.environ.get("SHEET_NAME", "MLB Daily Model")
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
 
 GAME_SOURCE_TAB = "Game Picks"
@@ -31,7 +31,6 @@ BEST_CARD_RUN_TAB = "Best Card Run Log"
 
 PUBLISHED_GAME_LIMIT = 7
 PUBLISHED_HR_LIMIT = 9
-EXTENDED_HR_LIMIT = 30
 PUBLISHED_PROP_LIMIT = 20
 
 
@@ -137,6 +136,8 @@ def load_inputs(workbook):
         rank = as_int(row.get("Rank"))
         if date_text(row.get("Date")) != TODAY.isoformat() or not 1 <= rank <= PUBLISHED_GAME_LIMIT:
             continue
+        if number(row.get("Win Probability")) < 65:
+            continue
         if not verified(row.get("Verified")):
             continue
         row = dict(row)
@@ -148,7 +149,7 @@ def load_inputs(workbook):
     hr_candidates = []
     for row in hr_records:
         rank = as_int(row.get("Rank"))
-        if date_text(row.get("Date")) != TODAY.isoformat() or not 1 <= rank <= EXTENDED_HR_LIMIT:
+        if date_text(row.get("Date")) != TODAY.isoformat() or not 1 <= rank <= PUBLISHED_HR_LIMIT:
             continue
         if hr_version and row.get("Model Version") != hr_version:
             continue
@@ -156,7 +157,7 @@ def load_inputs(workbook):
             continue
         row = dict(row)
         row["GamePk"] = normalized_game_pk(row.get("GamePk"))
-        row["HR Candidate Source"] = "Published HR Target" if rank <= PUBLISHED_HR_LIMIT else "Extended HR Candidate"
+        row["HR Candidate Source"] = "Published HR Target"
         if row["GamePk"] and row.get("Player"):
             hr_candidates.append(row)
 
@@ -261,12 +262,21 @@ def build_stacks(games, hr_candidates, props):
     for game in games:
         game_pk = game["GamePk"]
         hr = best_hr_for_game(hrs_by_game.get(game_pk, []))
-        selected_props = select_distinct_props(props_by_game.get(game_pk, []), hr or {}, count=2)
+        game_props = props_by_game.get(game_pk, [])
+        hit_props = [row for row in game_props if row.get("Prop Type") == "Hits"]
+        selected_props = select_distinct_props(hit_props, hr or {}, count=2)
+        selection_mode = "Two Hits props"
+        if len(selected_props) < 2:
+            hit_rbi_props = [
+                row for row in game_props if row.get("Prop Type") in {"Hits", "RBIs"}
+            ]
+            selected_props = select_distinct_props(hit_rbi_props, hr or {}, count=2)
+            selection_mode = "Hits preferred; RBI fallback"
         reasons = []
         if not hr:
-            reasons.append("No HR candidate in ranks 1-30")
+            reasons.append("No published HR candidate in ranks 1-9")
         if len(selected_props) < 2:
-            reasons.append("Fewer than two distinct statistically eligible props after excluding HR hitter")
+            reasons.append("Fewer than two distinct Hits/RBI props after excluding HR hitter")
         complete = not reasons
         integrity.append({
             "Date": TODAY.isoformat(), "GamePk": game_pk, "Game": game.get("Game", ""),
@@ -277,44 +287,11 @@ def build_stacks(games, hr_candidates, props):
             "Complete": "Yes" if complete else "No", "Notes": "Complete stack" if complete else "; ".join(reasons),
         })
         if complete:
-            stack = make_stack(game, hr, selected_props, "Primary one-stack-per-game selection")
+            stack = make_stack(game, hr, selected_props, selection_mode)
             stacks.append(stack)
             primary_keys.add(stack["Prediction ID"])
 
     card = top_complete_stacks(stacks, count=3)
-
-    # Emergency fallback: if the slate cannot supply three different complete games,
-    # rank alternate statistically complete combinations from verified games. This
-    # preserves all player/schedule gates and never invents a pick.
-    if len(card) < 3:
-        alternates = []
-        for game in games:
-            game_pk = game["GamePk"]
-            ordered_hrs = sorted(
-                hrs_by_game.get(game_pk, []),
-                key=lambda row: (
-                    row.get("HR Candidate Source") == "Published HR Target",
-                    number(row.get("Score")),
-                    -as_int(row.get("Rank"), 9999),
-                ),
-                reverse=True,
-            )
-            for hr in ordered_hrs:
-                eligible_props = select_distinct_props(props_by_game.get(game_pk, []), hr, count=6)
-                for first_index in range(len(eligible_props)):
-                    for second_index in range(first_index + 1, len(eligible_props)):
-                        selected = [eligible_props[first_index], eligible_props[second_index]]
-                        stack = make_stack(game, hr, selected, "Emergency alternate complete stack")
-                        if stack["Prediction ID"] not in primary_keys:
-                            alternates.append(stack)
-        ranked_alternates = top_complete_stacks(alternates, count=max(0, 3 - len(card)))
-        card.extend(ranked_alternates)
-
-    if len(card) != 3:
-        raise RuntimeError(
-            f"Only {len(card)} distinct complete stacks could be formed after the verified alternate-stack fallback; "
-            "three statistically complete combinations are required."
-        )
     for rank, stack in enumerate(card, start=1):
         stack["Card Rank"] = rank
     return card, integrity
@@ -364,7 +341,7 @@ def append_unique(worksheet, headers, records):
 
 def build_email_rows(card):
     rows = [
-        ["Daily MLB Best Card - Three Statistical Game Stacks"], ["Last Updated", RUN_LOCAL],
+        ["Daily MLB Best Card - Up to Three Qualified Statistical Game Stacks"], ["Last Updated", RUN_LOCAL],
         ["Model Version", MODEL_VERSION], ["Schedule Date Used", TODAY.isoformat()],
         ["Schedule Date Logic", DATE_LOGIC],
         ["Selection Method", "35% Game model, 25% HR model, 20% per Player Prop; statistics only."], [],
@@ -381,9 +358,11 @@ def build_email_rows(card):
         ])
     rows.extend([
         ["Model Notes"],
-        ["HR Expansion Rule", "Published HR ranks 1-9 are preferred; ranks 10-30 may be used only to complete three qualified games."],
+        ["HR Qualification Rule", "Only published HR ranks 1-9 are eligible; extended HR candidates are excluded."],
         ["Data Constraint", "Statistics only. No sportsbook odds, lines, implied probability, or market influence."],
-        ["Always Three Rule", "Published props are preferred; the full statistically eligible prop pool is used only as needed to complete three games."],
+        ["Prop Qualification Rule", "Hits are preferred for both prop slots; RBIs are fallback-only; strikeout props are excluded."],
+        ["Card Count Rule", "Up to three qualified games are published; weak stacks are never added solely to reach three."],
+        ["Winner Qualification Rule", "Game-model win probability must be at least 65%."],
         ["Results Tracking", "Each component and complete stack will be archived and graded after games become final."],
     ])
     return rows
