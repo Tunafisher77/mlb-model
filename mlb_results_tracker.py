@@ -18,7 +18,7 @@ from zoneinfo import ZoneInfo
 
 
 
-SHEET_NAME = os.environ.get("SHEET_NAME", "Daily MLB HR Picks Scorecard")
+SHEET_NAME = os.environ.get("SHEET_NAME", "MLB Daily Model")
 MODEL_TIMEZONE = os.environ.get("MLB_SCHEDULE_TZ", "America/New_York")
 SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
