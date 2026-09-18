@@ -1037,7 +1037,20 @@ def refresh_best_card_results_email(workbook, target_date: str):
         row for row in rows_as_records(quota_retry(tracking.get_all_values))
         if str(row.get("Date", ""))[:10] == result_date
     ]
-    records.sort(key=lambda row: as_int(row.get("Card Rank"), 999))
+
+    # A card can be snapshotted more than once as same-day model outputs refresh.
+    # Keep only the newest published version of each card rank for the email.
+    latest_by_card: dict[int, dict[str, str]] = {}
+    for row in records:
+        card_rank = as_int(row.get("Card Rank"), 0)
+        if card_rank not in {1, 2, 3}:
+            continue
+        current = latest_by_card.get(card_rank)
+        if current is None or str(row.get("Snapshot Timestamp UTC", "")) >= str(
+            current.get("Snapshot Timestamp UTC", "")
+        ):
+            latest_by_card[card_rank] = row
+    records = [latest_by_card[rank] for rank in sorted(latest_by_card)]
 
     headers = [
         "Result Date", "Card", "Game", "Final Score", "Component",
