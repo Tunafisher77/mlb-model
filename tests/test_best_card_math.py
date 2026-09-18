@@ -52,14 +52,13 @@ class BestCardMathTest(unittest.TestCase):
         self.assertEqual(rows_as_records(values)[0]["Score"], "72.76")
 
 
-    def test_thin_slate_uses_distinct_complete_alternate_stack(self):
+    def test_thin_slate_publishes_only_qualified_games(self):
         games = [
             {"GamePk": "1", "Game": "A @ B", "Rank": "1", "Win Probability": "75", "Projected Winner": "B"},
             {"GamePk": "2", "Game": "C @ D", "Rank": "2", "Win Probability": "72", "Projected Winner": "D"},
         ]
         hrs = [
             {"GamePk": "1", "Player": "HR A", "Player ID": "10", "Rank": "1", "Score": "80", "HR Candidate Source": "Published HR Target"},
-            {"GamePk": "1", "Player": "HR B", "Player ID": "11", "Rank": "4", "Score": "74", "HR Candidate Source": "Published HR Target"},
             {"GamePk": "2", "Player": "HR C", "Player ID": "20", "Rank": "2", "Score": "78", "HR Candidate Source": "Published HR Target"},
         ]
         props = []
@@ -74,9 +73,32 @@ class BestCardMathTest(unittest.TestCase):
 
         card, _ = build_stacks(games, hrs, props)
 
-        self.assertEqual(len(card), 3)
-        self.assertEqual(len({row["Prediction ID"] for row in card}), 3)
-        self.assertTrue(any("Emergency alternate" in row["Selection Notes"] for row in card))
+        self.assertEqual(len(card), 2)
+        self.assertEqual({row["GamePk"] for row in card}, {"1", "2"})
+        self.assertFalse(any("Emergency alternate" in row["Selection Notes"] for row in card))
+
+    def test_hits_are_preferred_and_strikeouts_are_excluded(self):
+        games = [
+            {"GamePk": "1", "Game": "A @ B", "Rank": "1", "Win Probability": "75", "Projected Winner": "B"},
+        ]
+        hrs = [
+            {"GamePk": "1", "Player": "HR A", "Player ID": "10", "Rank": "1", "Score": "80", "HR Candidate Source": "Published HR Target"},
+        ]
+        props = [
+            {"GamePk": "1", "Player": "Hit A", "Player ID": "11", "Prediction ID": "hit-a",
+             "Prop Type": "Hits", "Prop Score": 70, "Projected Probability": 70,
+             "Prop Candidate Source": "Published Player Prop"},
+            {"GamePk": "1", "Player": "Hit B", "Player ID": "12", "Prediction ID": "hit-b",
+             "Prop Type": "Hits", "Prop Score": 69, "Projected Probability": 69,
+             "Prop Candidate Source": "Published Player Prop"},
+            {"GamePk": "1", "Player": "Pitcher A", "Player ID": "13", "Prediction ID": "k-a",
+             "Prop Type": "Strikeouts", "Prop Score": 99, "Projected Probability": 99,
+             "Prop Candidate Source": "Published Player Prop"},
+        ]
+
+        card, _ = build_stacks(games, hrs, props)
+
+        self.assertEqual([card[0]["Prop 1 Type"], card[0]["Prop 2 Type"]], ["Hits", "Hits"])
 
 
 if __name__ == "__main__":
