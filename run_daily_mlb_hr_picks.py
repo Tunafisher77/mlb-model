@@ -25,6 +25,7 @@ SCHEDULE_DATE_LOGIC = "Official MLB slate date from America/New_York"
 
 MODEL_VERSION = "Automated V16.2 - Eastern Slate Schedule Fix"
 SHEET_NAME = os.environ.get("SHEET_NAME", "Daily MLB HR Picks Scorecard")
+SHEET_ID = os.environ.get("SHEET_ID", "1SsjWyqMsEW9yghahhuHCjDDtqlW2-56SbUWwmMXdig8")
 
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
 
@@ -1605,10 +1606,7 @@ def refresh_run_log(sh, model, matchups, card):
 
 def write_to_sheet(model, matchups):
     gc = auth_google()
-    try:
-        sh = gc.open(SHEET_NAME)
-    except Exception:
-        sh = gc.create(SHEET_NAME)
+    sh = gc.open_by_key(SHEET_ID)
 
     daily_ws = get_or_create_ws(sh, "Daily Picks", 1000, 40)
     results_ws = get_or_create_ws(sh, "Model Results", 1000, 45)
