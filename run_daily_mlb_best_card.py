@@ -17,6 +17,7 @@ MODEL_VERSION = "Best Card V1.2 - Historical Hit-Rate Ranking"
 MODEL_TIMEZONE = os.environ.get("MLB_SCHEDULE_TZ", "America/New_York")
 DATE_OVERRIDE = os.environ.get("MLB_SCHEDULE_DATE", "").strip()
 SHEET_NAME = os.environ.get("SHEET_NAME", "MLB Daily Model")
+SHEET_ID = os.environ.get("SHEET_ID", "1SsjWyqMsEW9yghahhuHCjDDtqlW2-56SbUWwmMXdig8")
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
 
 GAME_SOURCE_TAB = "Game Picks"
@@ -462,7 +463,7 @@ def write_outputs(workbook, card, integrity):
 def main():
     print(f"Starting {MODEL_VERSION} for {TODAY.isoformat()}")
     client = auth_google()
-    workbook = client.open(SHEET_NAME)
+    workbook = client.open_by_key(SHEET_ID)
     games, hrs, props, _, _, _ = load_inputs(workbook)
     card, integrity = build_stacks(games, hrs, props)
     write_outputs(workbook, card, integrity)
