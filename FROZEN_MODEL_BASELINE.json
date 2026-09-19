@@ -3,8 +3,8 @@
   "files": {
     ".github/workflows/game_picks.yml": "c6e1ea4be204f70edcabdb7e9e7da6d3f58ed1c12e5d023f2705c71152a7555d",
     ".github/workflows/main.yml": "647699eabdba9b6f72bdd537e4fe088f2aa797a67819e5755e9b8e80b4d11104",
-    "run_daily_mlb_game_picks.py": "a68ffc72dfb9dab28a8119d5069d5f3eee74cd99e42e43989d8bb3574b414e14",
-    "run_daily_mlb_hr_picks.py": "b064403efba327418d17fe9769c0fcef30946282bf17eb1af293accbd3561ad6"
+    "run_daily_mlb_game_picks.py": "d603a2959d23ad2bf9a58bdfe4b106ecbf8f1e18516b74af801113917fc7afb4",
+    "run_daily_mlb_hr_picks.py": "079f01afdb144bbfe0665392341b202b795da842f0636d73100a8baac38beedc"
   },
   "model_versions": {
     "game": "Game Picks V2.1.1 - Schedule Integrity Fix + Eastern Slate Date",
