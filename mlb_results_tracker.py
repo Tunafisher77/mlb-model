@@ -19,6 +19,7 @@ from zoneinfo import ZoneInfo
 
 
 SHEET_NAME = os.environ.get("SHEET_NAME", "MLB Daily Model")
+SHEET_ID = os.environ.get("SHEET_ID", "1SsjWyqMsEW9yghahhuHCjDDtqlW2-56SbUWwmMXdig8")
 MODEL_TIMEZONE = os.environ.get("MLB_SCHEDULE_TZ", "America/New_York")
 SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
@@ -1113,7 +1114,7 @@ def append_run_log(workbook, mode: str, target_date: str, details: str, status: 
 
 def run(mode: str, target_date: str) -> dict[str, int]:
     client = auth_google()
-    workbook = client.open(SHEET_NAME)
+    workbook = client.open_by_key(SHEET_ID)
     counts = {
         "game_snapshots": 0, "hr_snapshots": 0, "prop_snapshots": 0,
         "best_card_snapshots": 0, "game_graded": 0, "hr_graded": 0,
