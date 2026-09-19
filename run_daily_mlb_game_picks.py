@@ -1,4 +1,5 @@
 import os
+import time
 import json
 import math
 import requests
@@ -774,7 +775,16 @@ def write_to_sheet(picks, debug, integrity):
 def main():
     print(f"Starting {MODEL_VERSION}")
     picks, debug, integrity = build_game_model()
-    write_to_sheet(picks, debug, integrity)
+    for attempt in range(3):
+        try:
+            write_to_sheet(picks, debug, integrity)
+            break
+        except gspread.exceptions.APIError as exc:
+            if "429" not in str(exc) or attempt == 2:
+                raise
+            wait_seconds = 65 * (attempt + 1)
+            print(f"Google Sheets write quota reached; retrying in {wait_seconds} seconds.")
+            time.sleep(wait_seconds)
     print("Top Game Picks")
     if picks.empty:
         print("- No fully verified games available for scoring.")
