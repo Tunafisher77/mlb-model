@@ -57,6 +57,7 @@ def resolve_schedule_date():
 TODAY, SCHEDULE_DATE_REASON = resolve_schedule_date()
 YEAR = TODAY.year
 SHEET_NAME = os.environ.get("SHEET_NAME", "Daily MLB HR Picks Scorecard")
+SHEET_ID = os.environ.get("SHEET_ID", "1SsjWyqMsEW9yghahhuHCjDDtqlW2-56SbUWwmMXdig8")
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
 
 TEAM_FIX = {
@@ -722,10 +723,7 @@ def build_email_rows(picks):
 
 def write_to_sheet(picks, debug, integrity):
     gc = auth_google()
-    try:
-        sh = gc.open(SHEET_NAME)
-    except Exception:
-        sh = gc.create(SHEET_NAME)
+    sh = gc.open_by_key(SHEET_ID)
     game_ws = get_or_create_ws(sh, "Game Picks", 100, 45)
     debug_ws = get_or_create_ws(sh, "Game Model Debug", 1000, 75)
     integrity_ws = get_or_create_ws(sh, "Game Schedule Integrity", 1000, 35)
