@@ -32,6 +32,7 @@ MODEL_VERSION = "Player Props V1.1.1 - Empty Stats Response Guard"
 MODEL_TIMEZONE = os.environ.get("MLB_SCHEDULE_TZ", "America/New_York")
 DATE_OVERRIDE = os.environ.get("MLB_SCHEDULE_DATE", "").strip()
 SHEET_NAME = os.environ.get("SHEET_NAME", "Daily MLB HR Picks Scorecard")
+SHEET_ID = os.environ.get("SHEET_ID", "1SsjWyqMsEW9yghahhuHCjDDtqlW2-56SbUWwmMXdig8")
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
 
 HITS_GATES = {1: 0.62, 2: 0.32, 3: 0.14}
@@ -529,8 +530,7 @@ def build_email_rows(card, model):
 
 def write_to_sheet(model, card, integrity):
     client = auth_google()
-    try: workbook = client.open(SHEET_NAME)
-    except Exception: workbook = client.create(SHEET_NAME)
+    workbook = client.open_by_key(SHEET_ID)
     current_ws = get_or_create_sheet(workbook, "Player Props", 100, 40)
     history_ws = get_or_create_sheet(workbook, "Player Props Model Results", 5000, 40)
     email_ws = get_or_create_sheet(workbook, "Player Props Email Summary", 250, 10)
