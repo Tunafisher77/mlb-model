@@ -1,0 +1,84 @@
+name: MLB Daily Recovery Guard
+
+on:
+  # Creating or deliberately editing this file also performs an immediate recovery run.
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/daily_recovery.yml"
+  schedule:
+    # Independent late-morning safety net after the normal model workflows.
+    # Multiple non-round times reduce the chance of GitHub dropping every event.
+    - cron: "19 14 * * *"
+    - cron: "23 15 * * *"
+    - cron: "27 16 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: mlb-daily-recovery
+  cancel-in-progress: false
+
+jobs:
+  refresh-current-slate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install all model dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r requirements_player_props.txt -r requirements_best_card.txt
+
+      - name: Verify production safeguards
+        run: python -m unittest discover -s tests -v
+
+      - name: Refresh all MLB sheets sequentially with retries
+        env:
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+        shell: bash
+        run: |
+          set -uo pipefail
+
+          run_with_retry() {
+            local label="$1"
+            shift
+            local attempt
+            for attempt in 1 2 3; do
+              echo "::group::${label} (attempt ${attempt}/3)"
+              if "$@"; then
+                echo "::endgroup::"
+                echo "${label} completed."
+                return 0
+              fi
+              status=$?
+              echo "::endgroup::"
+              if [ "${attempt}" -lt 3 ]; then
+                delay=$((attempt * 30))
+                echo "${label} failed with status ${status}; retrying in ${delay}s."
+                sleep "${delay}"
+              fi
+            done
+            echo "::error::${label} failed after 3 attempts."
+            return 1
+          }
+
+          # Serial execution prevents simultaneous writes from exhausting the
+          # Google Sheets per-user write quota.
+          run_with_retry "HR picks" python run_daily_mlb_hr_picks.py
+          run_with_retry "Game picks" python run_daily_mlb_game_picks.py
+          run_with_retry "Player props" python run_daily_mlb_player_props.py
+          run_with_retry "Best card" python run_daily_mlb_best_card.py
+
+      - name: Archive and grade the refreshed card
+        env:
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+        run: python mlb_results_tracker.py --mode both
