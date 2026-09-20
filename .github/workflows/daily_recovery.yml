@@ -38,10 +38,62 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt -r requirements_player_props.txt -r requirements_best_card.txt
 
+      - name: Check current slate freshness
+        id: freshness
+        env:
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from datetime import datetime, timedelta
+          from zoneinfo import ZoneInfo
+
+          import gspread
+          from google.oauth2.service_account import Credentials
+
+          now = datetime.now(ZoneInfo("America/New_York"))
+          expected = now.date() + timedelta(days=1) if now.hour >= 18 else now.date()
+          expected_text = expected.isoformat()
+          credentials = Credentials.from_service_account_info(
+              json.loads(os.environ["GOOGLE_SERVICE_ACCOUNT_JSON"]),
+              scopes=[
+                  "https://www.googleapis.com/auth/spreadsheets",
+                  "https://www.googleapis.com/auth/drive",
+              ],
+          )
+          workbook = gspread.authorize(credentials).open_by_key(
+              "1SsjWyqMsEW9yghahhuHCjDDtqlW2-56SbUWwmMXdig8"
+          )
+          tabs = [
+              "Email Summary",
+              "Game Email Summary",
+              "Player Props Email Summary",
+              "Best Card Email Summary",
+          ]
+          found = {}
+          for tab in tabs:
+              values = workbook.worksheet(tab).get("A1:B15")
+              summary = {
+                  row[0]: row[1] if len(row) > 1 else ""
+                  for row in values
+                  if row and row[0]
+              }
+              found[tab] = summary.get("Schedule Date Used", "")
+          current = all(value == expected_text for value in found.values())
+          print(f"Expected slate: {expected_text}")
+          print(f"Summary dates: {found}")
+          print(f"All model sheets current: {current}")
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write(f"current={'true' if current else 'false'}\n")
+          PY
+
       - name: Verify production safeguards
+        if: steps.freshness.outputs.current != 'true'
         run: python -m unittest discover -s tests -v
 
-      - name: Refresh all MLB sheets sequentially with retries
+      - name: Refresh stale MLB slate sequentially with retries
+        if: steps.freshness.outputs.current != 'true'
         env:
           GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
         shell: bash
@@ -78,7 +130,7 @@ jobs:
           run_with_retry "Player props" python run_daily_mlb_player_props.py
           run_with_retry "Best card" python run_daily_mlb_best_card.py
 
-      - name: Archive and grade the refreshed card
+      - name: Archive and grade published picks
         env:
           GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
         run: python mlb_results_tracker.py --mode both
