@@ -1,18 +1,18 @@
 name: MLB Daily Recovery Guard
 
 on:
-  # Creating or deliberately editing this file also performs an immediate recovery run.
   push:
     branches:
       - main
     paths:
       - ".github/workflows/daily_recovery.yml"
   schedule:
-    # Independent late-morning safety net after the normal model workflows.
-    # Multiple non-round times reduce the chance of GitHub dropping every event.
-    - cron: "19 14 * * *"
-    - cron: "23 15 * * *"
-    - cron: "27 16 * * *"
+    # Start before the 6 AM Pacific target, with staggered backups.
+    # GitHub scheduled workflows can be delayed during periods of high load.
+    - cron: "19 12 * * *"
+    - cron: "23 13 * * *"
+    - cron: "27 14 * * *"
+    - cron: "31 15 * * *"
   workflow_dispatch:
 
 concurrency:
@@ -22,7 +22,7 @@ concurrency:
 jobs:
   refresh-current-slate:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 35
 
     steps:
       - name: Checkout Repo
@@ -104,15 +104,16 @@ jobs:
             local label="$1"
             shift
             local attempt
+            local status
             for attempt in 1 2 3; do
               echo "::group::${label} (attempt ${attempt}/3)"
-              if "$@"; then
-                echo "::endgroup::"
+              "$@"
+              status=$?
+              echo "::endgroup::"
+              if [ "${status}" -eq 0 ]; then
                 echo "${label} completed."
                 return 0
               fi
-              status=$?
-              echo "::endgroup::"
               if [ "${attempt}" -lt 3 ]; then
                 delay=$((attempt * 30))
                 echo "${label} failed with status ${status}; retrying in ${delay}s."
@@ -123,12 +124,67 @@ jobs:
             return 1
           }
 
-          # Serial execution prevents simultaneous writes from exhausting the
-          # Google Sheets per-user write quota.
-          run_with_retry "HR picks" python run_daily_mlb_hr_picks.py
-          run_with_retry "Game picks" python run_daily_mlb_game_picks.py
-          run_with_retry "Player props" python run_daily_mlb_player_props.py
-          run_with_retry "Best card" python run_daily_mlb_best_card.py
+          failures=0
+          run_with_retry "HR picks" python run_daily_mlb_hr_picks.py || failures=1
+          run_with_retry "Game picks" python run_daily_mlb_game_picks.py || failures=1
+          run_with_retry "Player props" python run_daily_mlb_player_props.py || failures=1
+          run_with_retry "Best card" python run_daily_mlb_best_card.py || failures=1
+          if [ "${failures}" -ne 0 ]; then
+            echo "::error::One or more MLB refreshes failed."
+            exit 1
+          fi
+
+      - name: Verify all four refreshed summaries
+        if: steps.freshness.outputs.current != 'true'
+        env:
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from datetime import datetime, timedelta
+          from zoneinfo import ZoneInfo
+
+          import gspread
+          from google.oauth2.service_account import Credentials
+
+          now = datetime.now(ZoneInfo("America/New_York"))
+          expected = now.date() + timedelta(days=1) if now.hour >= 18 else now.date()
+          expected_text = expected.isoformat()
+          credentials = Credentials.from_service_account_info(
+              json.loads(os.environ["GOOGLE_SERVICE_ACCOUNT_JSON"]),
+              scopes=[
+                  "https://www.googleapis.com/auth/spreadsheets",
+                  "https://www.googleapis.com/auth/drive",
+              ],
+          )
+          workbook = gspread.authorize(credentials).open_by_key(
+              "1SsjWyqMsEW9yghahhuHCjDDtqlW2-56SbUWwmMXdig8"
+          )
+          tabs = [
+              "Email Summary",
+              "Game Email Summary",
+              "Player Props Email Summary",
+              "Best Card Email Summary",
+          ]
+          stale = {}
+          for tab in tabs:
+              values = workbook.worksheet(tab).get("A1:B15")
+              summary = {
+                  row[0]: row[1] if len(row) > 1 else ""
+                  for row in values
+                  if row and row[0]
+              }
+              actual = summary.get("Schedule Date Used", "")
+              if actual != expected_text:
+                  stale[tab] = actual or "missing"
+          if stale:
+              raise SystemExit(
+                  f"Refresh commands completed but summaries are not current. "
+                  f"Expected {expected_text}; stale={stale}"
+              )
+          print(f"Verified all four summaries for {expected_text}.")
+          PY
 
       - name: Archive and grade published picks
         env:
