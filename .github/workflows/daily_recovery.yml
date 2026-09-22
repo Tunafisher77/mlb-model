@@ -1,4 +1,5 @@
 name: MLB Daily Recovery Guard
+# Manual recovery trigger: 2026-09-22 missing Player Props and Best Card
 
 on:
   push:
