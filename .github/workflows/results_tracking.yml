@@ -2,7 +2,10 @@ name: MLB Results Tracking
 
 on:
   schedule:
-    # Runs after all four published models. The second run is an idempotent retry.
+    # Grade the previous slate before the morning Best Card email when possible.
+    # Later runs snapshot today's published models and retry incomplete grades.
+    - cron: "15 11 * * *"
+    - cron: "15 12 * * *"
     - cron: "15 13 * * *"
     - cron: "15 15 * * *"
   workflow_dispatch:
@@ -49,6 +52,12 @@ jobs:
           TRACKER_DATE: ${{ inputs.tracking_date || '' }}
         run: |
           args=(--mode "$TRACKER_MODE")
+          # Early scheduled runs grade archived picks without requiring today's
+          # model summaries, which may still contain yesterday's slate.
+          if [ "${{ github.event_name }}" = "schedule" ] && \
+             { [ "${{ github.event.schedule }}" = "15 11 * * *" ] || [ "${{ github.event.schedule }}" = "15 12 * * *" ]; }; then
+            args=(--mode grade)
+          fi
           if [ -n "$TRACKER_DATE" ]; then
             args+=(--date "$TRACKER_DATE")
           fi
