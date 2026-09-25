@@ -2,9 +2,8 @@ name: Daily MLB Player Props
 
 on:
   schedule:
-    # Runs after the frozen HR and Game models.
-    # :07 avoids the high-load top-of-hour scheduling window.
-    # Later entries are backups for delayed or dropped schedule events.
+    # Run after HR and Game, with predawn backups for delayed schedules.
+    - cron: "7 8 * * *"
     - cron: "7 12 * * *"
     - cron: "7 13 * * *"
     - cron: "7 14 * * *"
