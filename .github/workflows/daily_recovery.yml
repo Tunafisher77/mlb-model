@@ -1,5 +1,5 @@
 name: MLB Daily Recovery Guard
-# Manual recovery trigger: 2026-09-22 missing Player Props and Best Card
+# Manual recovery trigger: 2026-09-25 refresh current slate after frozen workflow checksum repair
 
 on:
   push:
