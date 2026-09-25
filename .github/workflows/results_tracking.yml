@@ -2,8 +2,8 @@ name: MLB Results Tracking
 
 on:
   schedule:
-    # Grade the previous slate before the morning Best Card email when possible.
-    # Later runs snapshot today's published models and retry incomplete grades.
+    # Grade yesterday early; later runs retry and snapshot today's picks.
+    - cron: "15 7 * * *"
     - cron: "15 11 * * *"
     - cron: "15 12 * * *"
     - cron: "15 13 * * *"
@@ -55,7 +55,7 @@ jobs:
           # Early scheduled runs grade archived picks without requiring today's
           # model summaries, which may still contain yesterday's slate.
           if [ "${{ github.event_name }}" = "schedule" ] && \
-             { [ "${{ github.event.schedule }}" = "15 11 * * *" ] || [ "${{ github.event.schedule }}" = "15 12 * * *" ]; }; then
+             { [ "${{ github.event.schedule }}" = "15 7 * * *" ] || [ "${{ github.event.schedule }}" = "15 11 * * *" ] || [ "${{ github.event.schedule }}" = "15 12 * * *" ]; }; then
             args=(--mode grade)
           fi
           if [ -n "$TRACKER_DATE" ]; then
