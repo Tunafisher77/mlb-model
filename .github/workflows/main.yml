@@ -2,8 +2,9 @@ name: Daily MLB HR Picks
 
 on:
   schedule:
-    # Primary: 11:30 UTC = 4:30 AM Pacific / 7:30 AM Eastern during daylight time.
-    # Backups protect against delayed or dropped GitHub schedule events.
+    # Start early because GitHub scheduled jobs have recently started hours late.
+    # During daylight time, 07:30 UTC is 00:30 Pacific.
+    - cron: "30 7 * * *"
     - cron: "30 11 * * *"
     - cron: "30 12 * * *"
     - cron: "30 13 * * *"
