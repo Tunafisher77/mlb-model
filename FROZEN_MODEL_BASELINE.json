@@ -1,8 +1,8 @@
 {
   "purpose": "Protect the two production selection models while downstream tracking is added.",
   "files": {
-    ".github/workflows/game_picks.yml": "c6e1ea4be204f70edcabdb7e9e7da6d3f58ed1c12e5d023f2705c71152a7555d",
-    ".github/workflows/main.yml": "647699eabdba9b6f72bdd537e4fe088f2aa797a67819e5755e9b8e80b4d11104",
+    ".github/workflows/game_picks.yml": "dc1990775456bc4adfcdb239c24216414982e64d9ecccddd0c37aec3af285e96",
+    ".github/workflows/main.yml": "65bd569815871de2993e2c13f0fe857408edbdcb9d971a9dffacc2b581d295e7",
     "run_daily_mlb_game_picks.py": "d603a2959d23ad2bf9a58bdfe4b106ecbf8f1e18516b74af801113917fc7afb4",
     "run_daily_mlb_hr_picks.py": "079f01afdb144bbfe0665392341b202b795da842f0636d73100a8baac38beedc"
   },
