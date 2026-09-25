@@ -2,8 +2,8 @@ name: Daily MLB Best Card
 
 on:
   schedule:
-    # Runs after HR, Game, and Player Props models.
-    # Later entries are backups for delayed or dropped schedule events.
+    # Run after the three source models; retain later backups.
+    - cron: "30 8 * * *"
     - cron: "30 12 * * *"
     - cron: "30 13 * * *"
     - cron: "30 14 * * *"
