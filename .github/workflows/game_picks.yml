@@ -2,8 +2,8 @@ name: Daily MLB Game Picks
 
 on:
   schedule:
-    # Primary: 11:45 UTC = 4:45 AM Pacific / 7:45 AM Eastern during daylight time.
-    # Backups protect against delayed or dropped GitHub schedule events.
+    # Stagger after HR; early backups absorb delayed GitHub schedule events.
+    - cron: "45 7 * * *"
     - cron: "45 11 * * *"
     - cron: "45 12 * * *"
     - cron: "45 13 * * *"
