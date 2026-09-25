@@ -8,8 +8,12 @@ on:
     paths:
       - ".github/workflows/daily_recovery.yml"
   schedule:
-    # Start before the 6 AM Pacific target, with staggered backups.
-    # GitHub scheduled workflows can be delayed during periods of high load.
+    # Start predawn for the 7 AM Pacific email target.
+    # GitHub schedules can be delayed, so retain hourly backups.
+    - cron: "19 8 * * *"
+    - cron: "19 9 * * *"
+    - cron: "19 10 * * *"
+    - cron: "19 11 * * *"
     - cron: "19 12 * * *"
     - cron: "23 13 * * *"
     - cron: "27 14 * * *"
