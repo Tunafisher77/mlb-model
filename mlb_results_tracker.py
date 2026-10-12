@@ -105,7 +105,8 @@ def target_date_text(override: str = "") -> str:
     if env_override:
         datetime.strptime(env_override, "%Y-%m-%d")
         return env_override
-    return datetime.now(ZoneInfo(MODEL_TIMEZONE)).date().isoformat()
+    now = datetime.now(ZoneInfo(MODEL_TIMEZONE))
+    return (now.date() + timedelta(days=1) if now.hour >= 18 else now.date()).isoformat()
 
 
 def auth_google():
