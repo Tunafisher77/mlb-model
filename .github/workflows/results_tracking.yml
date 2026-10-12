@@ -72,14 +72,13 @@ jobs:
         if: steps.mlb_slate.outputs.has_games == 'true'
         env:
           GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
-          TRACKER_MODE: ${{ inputs.mode || 'both' }}
+          TRACKER_MODE: ${{ inputs.mode || 'grade' }}
           TRACKER_DATE: ${{ inputs.tracking_date || '' }}
         run: |
           args=(--mode "$TRACKER_MODE")
-          # Early scheduled runs grade archived picks without requiring today's
-          # model summaries, which may still contain yesterday's slate.
-          if [ "${{ github.event_name }}" = "schedule" ] && \
-             { [ "${{ github.event.schedule }}" = "15 7 * * *" ] || [ "${{ github.event.schedule }}" = "15 11 * * *" ] || [ "${{ github.event.schedule }}" = "15 12 * * *" ]; }; then
+          # Scheduled tracking grades archived picks only; snapshots are taken
+          # by recovery after the source models are confirmed fresh.
+          if [ "${{ github.event_name }}" = "schedule" ]; then
             args=(--mode grade)
           fi
           if [ -n "$TRACKER_DATE" ]; then
