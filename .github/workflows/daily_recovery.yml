@@ -23,17 +23,41 @@ jobs:
       - name: Checkout Repo
         uses: actions/checkout@v4
 
+      - name: Check for official MLB games before installing dependencies
+        id: early_slate
+        run: |
+          python - <<'PY'
+          import json, os
+          from datetime import datetime, timedelta
+          from urllib.request import urlopen
+          from zoneinfo import ZoneInfo
+          now = datetime.now(ZoneInfo('America/New_York'))
+          day = (now.date() + timedelta(days=1) if now.hour >= 18 else now.date()).isoformat()
+          try:
+              with urlopen(f'https://statsapi.mlb.com/api/v1/schedule?sportId=1&date={day}', timeout=15) as response:
+                  count = sum(len(x.get('games', [])) for x in json.load(response).get('dates', []))
+          except Exception as exc:
+              print(f'Schedule unavailable; preserve normal checks: {exc}')
+              count = -1
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write(f'no_games={str(count == 0).lower()}\n')
+          print(f'{day}: {count} scheduled MLB games')
+          PY
+
       - name: Setup Python
+        if: steps.early_slate.outputs.no_games != 'true'
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
       - name: Install all model dependencies
+        if: steps.early_slate.outputs.no_games != 'true'
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt -r requirements_player_props.txt -r requirements_best_card.txt
 
       - name: Check current slate freshness
+        if: steps.early_slate.outputs.no_games != 'true'
         id: freshness
         env:
           GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
@@ -159,11 +183,11 @@ jobs:
           PY
 
       - name: Verify production safeguards
-        if: steps.freshness.outputs.no_games == 'false' && steps.freshness.outputs.current != 'true'
+        if: steps.early_slate.outputs.no_games != 'true' && steps.freshness.outputs.no_games == 'false' && steps.freshness.outputs.current != 'true'
         run: python -m unittest discover -s tests -v
 
       - name: Refresh stale MLB slate sequentially with retries
-        if: steps.freshness.outputs.no_games == 'false' && steps.freshness.outputs.current != 'true'
+        if: steps.early_slate.outputs.no_games != 'true' && steps.freshness.outputs.no_games == 'false' && steps.freshness.outputs.current != 'true'
         env:
           GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
         shell: bash
@@ -205,7 +229,7 @@ jobs:
           fi
 
       - name: Verify all four refreshed summaries
-        if: steps.freshness.outputs.no_games == 'false' && steps.freshness.outputs.current != 'true'
+        if: steps.early_slate.outputs.no_games != 'true' && steps.freshness.outputs.no_games == 'false' && steps.freshness.outputs.current != 'true'
         env:
           GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
         run: |
@@ -304,7 +328,7 @@ jobs:
         # Recovery is a no-op once all four summaries are current. Results tracking
         # has its own workflow, so do not let a redundant tracker call turn an
         # already-successful email day into a recovery failure notification.
-        if: steps.freshness.outputs.no_games == 'false' && steps.freshness.outputs.current != 'true'
+        if: steps.early_slate.outputs.no_games != 'true' && steps.freshness.outputs.no_games == 'false' && steps.freshness.outputs.current != 'true'
         env:
           GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
         run: python mlb_results_tracker.py --mode both
