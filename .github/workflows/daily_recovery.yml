@@ -7,21 +7,7 @@ on:
       - main
     paths:
       - ".github/workflows/daily_recovery.yml"
-  schedule:
-    # Start predawn for the 7 AM Pacific email target.
-    # GitHub schedules can be delayed, so retain hourly backups.
-    - cron: "19 8 * * *"
-    - cron: "19 9 * * *"
-    - cron: "19 10 * * *"
-    - cron: "19 11 * * *"
-    - cron: "19 12 * * *"
-    - cron: "23 13 * * *"
-    - cron: "27 14 * * *"
-    - cron: "31 15 * * *"
-  workflow_dispatch:
-  workflow_run:
-    workflows: ["Daily MLB Player Props"]
-    types: [completed]
+  # Temporarily suspend noisy scheduled recovery runs while the postseason\n  # date/freshness mismatch is repaired. Manual dispatch remains available.\n  workflow_dispatch:
 
 concurrency:
   group: mlb-daily-recovery
