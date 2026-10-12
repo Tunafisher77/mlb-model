@@ -120,12 +120,42 @@ jobs:
               output.write(f"current={'true' if skip else 'false'}\n")
           PY
 
-      - name: Verify all model safeguards
+      - name: Check all three source summaries are aligned
+        id: sources
         if: steps.mlb_slate.outputs.has_games == 'true' && (github.event_name != 'schedule' || steps.freshness.outputs.current != 'true')
+        env:
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+          MLB_SCHEDULE_DATE: ${{ inputs.best_card_date || '' }}
+        run: |
+          python - <<'PY'
+          import json, os
+          from datetime import datetime, timedelta
+          from zoneinfo import ZoneInfo
+          import gspread
+          from google.oauth2.service_account import Credentials
+          now = datetime.now(ZoneInfo('America/New_York'))
+          expected = (now.date() + timedelta(days=1) if now.hour >= 18 else now.date()).isoformat()
+          override = os.environ.get('MLB_SCHEDULE_DATE', '').strip()
+          if override:
+              expected = override
+          credentials = Credentials.from_service_account_info(json.loads(os.environ['GOOGLE_SERVICE_ACCOUNT_JSON']), scopes=['https://www.googleapis.com/auth/spreadsheets','https://www.googleapis.com/auth/drive'])
+          workbook = gspread.authorize(credentials).open_by_key('1SsjWyqMsEW9yghahhuHCjDDtqlW2-56SbUWwmMXdig8')
+          dates = {}
+          for tab in ('Game Email Summary','Email Summary','Player Props Email Summary'):
+              rows = workbook.worksheet(tab).get('A1:B15')
+              dates[tab] = next((row[1] for row in rows if len(row) > 1 and row[0] == 'Schedule Date Used'), '')
+          ready = all(value == expected for value in dates.values())
+          print(f'Source readiness for {expected}: {dates}; ready={ready}')
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as out:
+              out.write(f'ready={str(ready).lower()}\\n'.replace('\\n','\n'))
+          PY
+
+      - name: Verify all model safeguards
+        if: steps.sources.outputs.ready == 'true'
         run: python -m unittest discover -s tests -v
 
       - name: Run Best Card Model
-        if: steps.mlb_slate.outputs.has_games == 'true' && (github.event_name != 'schedule' || steps.freshness.outputs.current != 'true')
+        if: steps.sources.outputs.ready == 'true'
         env:
           GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
           MLB_SCHEDULE_DATE: ${{ inputs.best_card_date || '' }}
