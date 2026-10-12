@@ -9,9 +9,6 @@ on:
       - 'tests/test_best_card_math.py'
   schedule:
     # Run after the three source models; retain later backups.
-    - cron: "30 8 * * *"
-    - cron: "30 12 * * *"
-    - cron: "30 13 * * *"
     - cron: "30 14 * * *"
     - cron: "30 15 * * *"
   workflow_dispatch:
@@ -37,7 +34,9 @@ jobs:
           from datetime import datetime
           from urllib.request import urlopen
           from zoneinfo import ZoneInfo
-          day = datetime.now(ZoneInfo("America/New_York")).date().isoformat()
+          now = datetime.now(ZoneInfo("America/New_York"))
+          from datetime import timedelta
+          day = (now.date() + timedelta(days=1) if now.hour >= 18 else now.date()).isoformat()
           with urlopen(f"https://statsapi.mlb.com/api/v1/schedule?sportId=1&date={day}", timeout=15) as r:
               data = json.load(r)
           count = sum(len(d.get("games", [])) for d in data.get("dates", []))
