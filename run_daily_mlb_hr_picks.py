@@ -15,13 +15,19 @@ RUN_NOW_EASTERN = datetime.now(EASTERN_TZ)
 
 # MLB schedule/slate date must be based on Eastern time, not the GitHub runner or Pacific time.
 # This prevents late-night Pacific runs from accidentally pulling yesterday's official schedule.
-SCHEDULE_DATE = RUN_NOW_EASTERN.date()
+DATE_OVERRIDE = os.environ.get("MLB_SCHEDULE_DATE", "").strip()
+if DATE_OVERRIDE:
+    SCHEDULE_DATE = datetime.strptime(DATE_OVERRIDE, "%Y-%m-%d").date()
+elif RUN_NOW_EASTERN.hour >= 18:
+    SCHEDULE_DATE = RUN_NOW_EASTERN.date() + timedelta(days=1)
+else:
+    SCHEDULE_DATE = RUN_NOW_EASTERN.date()
 TODAY = SCHEDULE_DATE  # backward-compatible alias used throughout the existing V16 code
 YEAR = SCHEDULE_DATE.year
 START = SCHEDULE_DATE - timedelta(days=14)
 RUN_TIMESTAMP_LOCAL = RUN_NOW_LOCAL.strftime("%Y-%m-%d %H:%M:%S %Z")
 RUN_TIMESTAMP_EASTERN = RUN_NOW_EASTERN.strftime("%Y-%m-%d %H:%M:%S %Z")
-SCHEDULE_DATE_LOGIC = "Official MLB slate date from America/New_York"
+SCHEDULE_DATE_LOGIC = ("Environment override MLB_SCHEDULE_DATE" if DATE_OVERRIDE else "America/New_York evening next-slate rule" if RUN_NOW_EASTERN.hour >= 18 else "Official MLB slate date from America/New_York")
 
 MODEL_VERSION = "Automated V16.3 - Postseason Pitcher Fallback"
 SHEET_NAME = os.environ.get("SHEET_NAME", "Daily MLB HR Picks Scorecard")
