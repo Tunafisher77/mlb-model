@@ -698,8 +698,7 @@ def build_model():
         (model["RosterTeamVerified"] == True) &
         (model["GamePk"].astype(str).str.len() > 0) &
         (model["Venue"].astype(str).str.len() > 0) &
-        (model["PlayableStatus"] == True) &
-        (model["WeatherTiedToVenue"] == True)
+        (model["PlayableStatus"] == True)
     )
 
     bad = model[model["HardVerified"] != True]
