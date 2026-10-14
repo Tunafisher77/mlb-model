@@ -537,7 +537,7 @@ def build_model():
 
             if away_id:
                 todays_team_ids.append(away_id)
-                verified = bool(game_pk and away_id and home_id and venue and playable_status and weather_tied)
+                verified = bool(game_pk and away_id and home_id and venue and playable_status)
                 notes = []
                 if not game_pk: notes.append("missing gamePk")
                 if not home_id: notes.append("missing opponent team id")
@@ -555,14 +555,14 @@ def build_model():
                     "PitcherSource": pitcher_source_label(home_p_id, home_p_name),
                     "PitcherConfidence": "High" if home_p_id else "Low",
                     "MatchupVerified": verified,
-                    "VerificationNotes": "Verified: OfficialSchedule+gamePk+Teams+PlayableStatus+Venue+ProbablePitcher+VenueWeather" if verified else "; ".join(notes),
+                    "VerificationNotes": "Verified: OfficialSchedule+gamePk+Teams+PlayableStatus+Venue; weather independently flagged" if verified else "; ".join(notes),
                     "ScheduleIntegrityKey": f"{game_pk}:{away_id}:{home_id}:{home_p_id}:{venue}",
                     **base
                 })
 
             if home_id:
                 todays_team_ids.append(home_id)
-                verified = bool(game_pk and home_id and away_id and venue and playable_status and weather_tied)
+                verified = bool(game_pk and home_id and away_id and venue and playable_status)
                 notes = []
                 if not game_pk: notes.append("missing gamePk")
                 if not away_id: notes.append("missing opponent team id")
@@ -580,7 +580,7 @@ def build_model():
                     "PitcherSource": pitcher_source_label(away_p_id, away_p_name),
                     "PitcherConfidence": "High" if away_p_id else "Low",
                     "MatchupVerified": verified,
-                    "VerificationNotes": "Verified: OfficialSchedule+gamePk+Teams+PlayableStatus+Venue+ProbablePitcher+VenueWeather" if verified else "; ".join(notes),
+                    "VerificationNotes": "Verified: OfficialSchedule+gamePk+Teams+PlayableStatus+Venue; weather independently flagged" if verified else "; ".join(notes),
                     "ScheduleIntegrityKey": f"{game_pk}:{home_id}:{away_id}:{away_p_id}:{venue}",
                     **base
                 })
@@ -595,6 +595,8 @@ def build_model():
     print(f"Verified teams today: {sorted(verified_team_ids)}")
 
     # V16.1: build current-team player map from active rosters before reading season stats.
+    if not verified_team_ids:
+        raise RuntimeError("No playable, schedule-verified MLB teams today; skipping roster lookup. Check game status and venue data.")
     active_players = fetch_active_roster_players(list(verified_team_ids))
     if not active_players:
         raise RuntimeError("Active roster lookup failed for all verified teams. Refusing to score stale player-team data.")
