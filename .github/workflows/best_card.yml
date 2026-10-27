@@ -147,7 +147,7 @@ jobs:
           ready = all(value == expected for value in dates.values())
           print(f'Source readiness for {expected}: {dates}; ready={ready}')
           with open(os.environ['GITHUB_OUTPUT'], 'a') as out:
-              out.write(f'ready={str(ready).lower()}\\n')
+              out.write(f'ready={str(ready).lower()}\n')
           PY
 
       - name: Verify all model safeguards
