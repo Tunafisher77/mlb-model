@@ -466,9 +466,9 @@ def snapshot_best_card(workbook, target_date: str) -> int:
             }
         )
         candidates.append(item)
-    if len(candidates) != 3:
+    if not 1 <= len(candidates) <= 3:
         raise RuntimeError(
-            f"Best Card snapshot found {len(candidates)} published stacks for {target_date}; exactly 3 required."
+            f"Best Card snapshot found {len(candidates)} published stacks for {target_date}; 1-3 published stacks required."
         )
     tracking = get_or_create_sheet(workbook, BEST_CARD_TRACKING_TAB, BEST_CARD_HEADERS, rows=5000)
     return append_new_rows(tracking, BEST_CARD_HEADERS, candidates)
