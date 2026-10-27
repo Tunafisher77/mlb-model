@@ -477,6 +477,10 @@ def main():
     games, hrs, props, _, _, _ = load_inputs(workbook)
     card, integrity = build_stacks(games, hrs, props)
     write_outputs(workbook, card, integrity)
+    # Archive this published card immediately, including one- and two-game slates.
+    from mlb_results_tracker import snapshot_best_card
+    archived = snapshot_best_card(workbook, TODAY.isoformat())
+    print(f"Best Card grading snapshots saved: {archived}")
     for stack in card:
         print(
             f"{stack['Card Rank']}. {stack['Projected Winner']} | {stack['HR Player']} HR | "
