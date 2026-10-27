@@ -292,6 +292,15 @@ class ResultsTrackerUnitTest(unittest.TestCase):
             ]),
             "Best Card": FakeWorksheet([best_card_headers, row, row_two, row_three]),
         })
+        # Thin slates must archive and grade just as full three-stack slates do.
+        for count in (1, 2):
+            thin = FakeWorkbook({
+                "Best Card Email Summary": workbook.sheets["Best Card Email Summary"],
+                "Best Card": FakeWorksheet([best_card_headers] + [row, row_two][:count]),
+            })
+            self.assertEqual(tracker.snapshot_best_card(thin, "2026-08-10"), count)
+            self.assertEqual(tracker.snapshot_best_card(thin, "2026-08-10"), 0)
+            self.assertEqual(tracker.grade_best_card_rows(thin, {"823918": sample_feed()}), count)
         self.assertEqual(tracker.snapshot_best_card(workbook, "2026-08-10"), 3)
         self.assertEqual(tracker.snapshot_best_card(workbook, "2026-08-10"), 0)
 
