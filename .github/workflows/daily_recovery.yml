@@ -2,12 +2,7 @@ name: MLB Daily Recovery Guard
 # Manual recovery trigger: 2026-10-03 rebuild Best Card after frozen checksum repair
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - ".github/workflows/daily_recovery.yml"
-  # Temporarily suspend noisy scheduled recovery runs while the postseason\n  # date/freshness mismatch is repaired. Manual dispatch remains available.\n  workflow_dispatch:
+  workflow_dispatch:
 
 concurrency:
   group: mlb-daily-recovery
