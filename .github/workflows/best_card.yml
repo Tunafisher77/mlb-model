@@ -2,21 +2,7 @@ name: Daily MLB Best Card
 # Recovery trigger: refreshed after Player Props recovery on 2026-10-07
 
 on:
-  push:
-    paths:
-      - '.github/workflows/best_card.yml'
-      - 'run_daily_mlb_best_card.py'
-      - 'tests/test_best_card_math.py'
-  schedule:
-    # Run after the three source models; retain later backups.
-    - cron: "30 14 * * *"
-    - cron: "30 15 * * *"
   workflow_dispatch:
-    inputs:
-      best_card_date:
-        description: "Optional source date in YYYY-MM-DD"
-        required: false
-        type: string
 
 jobs:
   run-best-card-model:
