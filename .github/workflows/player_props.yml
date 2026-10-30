@@ -2,17 +2,6 @@ name: Daily MLB Player Props
 # Recovery trigger enabled for approved production repairs.
 
 on:
-  push:
-    paths:
-      - '.github/workflows/player_props.yml'
-      - 'FROZEN_MODEL_BASELINE.json'
-      - 'run_daily_mlb_player_props.py'
-  schedule:
-    # Run after HR and Game, with predawn backups for delayed schedules.
-    - cron: "7 8 * * *"
-    - cron: "7 12 * * *"
-    - cron: "7 13 * * *"
-    - cron: "7 14 * * *"
   workflow_dispatch:
 
 jobs:
