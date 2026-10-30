@@ -1,17 +1,6 @@
 name: Daily MLB Game Picks
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - "run_daily_mlb_game_picks.py"
-      - ".github/workflows/game_picks.yml"
-  schedule:
-    # Stagger after HR; early backups absorb delayed GitHub schedule events.
-    - cron: "45 7 * * *"
-    - cron: "45 11 * * *"
-    - cron: "45 12 * * *"
-    - cron: "45 13 * * *"
   workflow_dispatch:
 
 jobs:
